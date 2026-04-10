@@ -14,19 +14,19 @@ const handleGenerateQuestions = async (req, res, next) => {
     const text = await extractTextFromPDF(req.file.buffer);
 
     if (!text || text.length < 50) {
-      return res.status(400).json({ 
-        error: "The PDF does not contain enough extractable text." 
+      return res.status(400).json({
+        error: "The PDF does not contain enough extractable text."
       });
     }
 
-    // 2. Generate questions via Gemini
-    const questions = await generateQuestions(text);
+    // 2. Generate quiz via Gemini (returns { quiz_title, questions })
+    const quizData = await generateQuestions(text);
 
     // 3. Return response
     return res.status(200).json({
       success: true,
-      count: questions.length,
-      questions,
+      quizTitle: quizData.quiz_title,
+      questions: quizData.questions,
     });
   } catch (error) {
     next(error); // Pass to global error handler
