@@ -24,9 +24,15 @@ const App = () => {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [questions, setQuestions] = useState([]);
+  const [userAnswers, setUserAnswers] = useState({}); // { questionIndex: selectedOption }
   const [error, setError] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef(null);
+
+  const handleSelectOption = (qIdx, option) => {
+    if (userAnswers[qIdx]) return; // Already answered
+    setUserAnswers(prev => ({ ...prev, [qIdx]: option }));
+  };
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -68,6 +74,7 @@ const App = () => {
     try {
       const data = await generateQuestions(file);
       setQuestions(data.questions);
+      setUserAnswers({});
     } catch (err) {
       setError(err.response?.data?.error || "Failed to generate questions. Please try again.");
     } finally {
@@ -78,6 +85,7 @@ const App = () => {
   const reset = () => {
     setFile(null);
     setQuestions([]);
+    setUserAnswers({});
     setError(null);
   };
 
@@ -227,15 +235,52 @@ const App = () => {
                       <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center flex-shrink-0 text-sm font-bold">
                         {idx + 1}
                       </div>
-                      <div className="space-y-4 flex-1">
-                        <h3 className="text-lg font-medium text-slate-100 leading-relaxed">
+                      <div className="space-y-6 flex-1">
+                        <h3 className="text-xl font-medium text-slate-100 leading-relaxed">
                           {q.question}
                         </h3>
-                        {q.answer && (
+                        
+                        <div className="grid gap-3 mt-4">
+                          {q.options && q.options.map((option, optIdx) => {
+                            const isSelected = userAnswers[idx] === option;
+                            const isCorrect = option === q.answer;
+                            const hasAnswered = !!userAnswers[idx];
+                            
+                            let stateClasses = "bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600 cursor-pointer";
+                            
+                            if (hasAnswered) {
+                              if (isCorrect) {
+                                stateClasses = "bg-emerald-500/20 border-emerald-500/50 text-emerald-300";
+                              } else if (isSelected) {
+                                stateClasses = "bg-red-500/20 border-red-500/50 text-red-300";
+                              } else {
+                                stateClasses = "bg-slate-800/20 border-slate-800 text-slate-600 opacity-50";
+                              }
+                            }
+
+                            return (
+                              <button 
+                                key={optIdx}
+                                disabled={hasAnswered}
+                                onClick={() => handleSelectOption(idx, option)}
+                                className={cn(
+                                  "p-4 rounded-xl border transition-all text-left flex items-center justify-between group/opt",
+                                  stateClasses
+                                )}
+                              >
+                                <span>{option}</span>
+                                {hasAnswered && isCorrect && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+                                {hasAnswered && isSelected && !isCorrect && <AlertCircle className="w-5 h-5 text-red-500" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {!q.options && q.answer && (
                            <div className="mt-4 p-5 bg-emerald-500/5 border border-emerald-500/10 rounded-xl">
                               <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-2">
                                 <CheckCircle2 className="w-4 h-4" />
-                                Answer
+                                Correct Answer
                               </div>
                               <p className="text-slate-300 italic">
                                 {q.answer}
