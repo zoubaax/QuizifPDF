@@ -7,12 +7,11 @@ const genAI = require("../config/gemini");
  */
 const generateQuestions = async (text) => {
   try {
-    // CRITICAL: Use gemini-1.5-flash. DO NOT change to 2.5-flash as it is currently 
-    // returning 503 errors and causing the frontend quiz generation to fail/loop.
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    // Using gemini-1.5-flash for stability as recommended for UPF course processing.
+    const modelId = "gemini-2.5-flash";
 
-    // Flash has a huge context window, but we still cap it to a reasonable size 
-    const maxChars = 100000; 
+    // Trimming text to a reasonable size (approx 10-15 pages) to ensure fast processing.
+    const maxChars = 30000; 
     const truncatedText = text.substring(0, maxChars);
 
     const prompt = `
@@ -38,10 +37,16 @@ const generateQuestions = async (text) => {
         ${truncatedText}
     `;
 
-    console.log("Calling Gemini AI with UPF Professor persona...");
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const responseText = response.text();
+    console.log(`Calling Gemini AI (${modelId}) with UPF Professor persona...`);
+    
+    // Using the new @google/genai SDK syntax
+    const result = await genAI.models.generateContent({
+      model: modelId,
+      contents: prompt,
+    });
+    
+    // In @google/genai, result.text is a property, not a method
+    const responseText = result.text;
     
     console.log("Raw AI Response received, length:", responseText.length);
 
