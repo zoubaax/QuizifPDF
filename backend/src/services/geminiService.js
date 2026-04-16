@@ -14,18 +14,20 @@ const generateQuestions = async (text) => {
     const maxChars = 30000; 
     const truncatedText = text.substring(0, maxChars);
 
-    const prompt = `
-        You are a Professor at UPF (Université Privée de Fès). Based on the following extracted text from a course material, generate a 5-question multiple choice quiz to help students study.
+        const prompt = `
+        Vous êtes un Professeur à l'UPF (Université Privée de Fès). En vous basant sur le texte suivant extrait d'un support de cours, générez un quiz de 5 questions à choix multiples pour aider les étudiants à réviser.
         
-        Return the result as a raw JSON object with this exact structure:
+        STRICT REQUIREMENT: THE ENTIRE RESPONSE CONTENT MUST BE IN FRENCH (TOUT LE CONTENU DOIT ÊTRE EN FRANÇAIS).
+
+        Return the result as a raw JSON object with this exact structure (content in French):
         {
-          "quiz_title": "string",
+          "quiz_title": "Titre du Quiz en français",
           "questions": [
             {
-              "question": "string",
-              "options": ["Option A", "Option B", "Option C", "Option D"],
+              "question": "Texte de la question en français",
+              "options": ["Option A en français", "Option B en français", "Option C en français", "Option D en français"],
               "correct_answer_index": 0,
-              "explanation": "Brief explanation why this is the correct answer"
+              "explanation": "Explication concise en français"
             }
           ]
         }
