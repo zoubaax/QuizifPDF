@@ -1,0 +1,145 @@
+const axios = require('axios');
+
+/**
+ * Generates questions from the provided text using NVIDIA NIM (e.g., Gemma or Llama).
+ * @param {string} text - The text to generate questions from.
+ * @returns {Promise<Object>} - A quiz data object.
+ */
+const generateQuestionsWithNvidia = async (text) => {
+  try {
+    const invokeUrl = "https://integrate.api.nvidia.com/v1/chat/completions";
+
+    // Truncating text to 15000 chars for faster inference prefill
+    const maxChars = 15000;
+    const truncatedText = text.substring(0, maxChars);
+
+    // Detect language from text content
+    const arabicChars = (truncatedText.match(/[\u0600-\u06FF]/g) || []).length;
+    const totalChars = truncatedText.replace(/\s/g, '').length;
+    const isArabic = (arabicChars / totalChars) > 0.3;
+
+    let systemPrompt, userPrompt;
+
+    if (isArabic) {
+      console.log("Detected: ARABIC content");
+      systemPrompt = `أنت مولد اختبارات. أعد فقط JSON صالح. لا تكتب أي نص آخر.
+القواعد:
+1. اللغة: يجب أن تكون جميع الأسئلة والخيارات والتفسيرات باللغة العربية فقط.
+2. الإيجاز: اجعل النصوص قصيرة ومختصرة.
+3. التنسيق: أعد كائن JSON فقط. لا markdown.`;
+
+      userPrompt = `أنشئ اختبار من 5 أسئلة اختيار من متعدد من النص التالي.
+أعد النتيجة بهذا الشكل:
+{"quiz_title":"عنوان الاختبار","questions":[{"question":"نص السؤال","options":["أ","ب","ج","د"],"correct_answer_index":0,"explanation":"تفسير قصير"}]}
+
+النص:
+---
+${truncatedText}`;
+    } else {
+      console.log("Detected: FRENCH/OTHER content");
+      systemPrompt = `Tu es un générateur de quiz. Retourne UNIQUEMENT du JSON valide. Pas de texte supplémentaire.
+RÈGLES:
+1. LANGUE: Utilise la même langue que le texte source.
+2. CONCISION: Questions courtes (max 15 mots), options courtes (max 8 mots).
+3. FORMAT: Retourne UNIQUEMENT un objet JSON valide.`;
+
+      userPrompt = `Génère un quiz de 5 questions à choix multiples à partir du texte suivant.
+Retourne ce JSON:
+{"quiz_title":"Titre","questions":[{"question":"...","options":["A","B","C","D"],"correct_answer_index":0,"explanation":"..."}]}
+
+Texte du cours:
+---
+${truncatedText}`;
+    }
+
+    console.log("Calling NVIDIA NIM (meta/llama-3.1-8b-instruct) - Speed Optimized...");
+
+    const payload = {
+      "model": "meta/llama-3.1-8b-instruct",
+      "messages": [
+        { "role": "system", "content": systemPrompt },
+        { "role": "user", "content": userPrompt }
+      ],
+      "max_tokens": 1024,
+      "temperature": 0.1, // Lower temperature is faster and more precise
+      "top_p": 0.70,
+      "stream": false
+    };
+
+    const response = await axios.post(invokeUrl, payload, {
+      headers: {
+        "Authorization": `Bearer ${process.env.NVIDIA_API_KEY}`,
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      }
+    });
+
+    const responseText = response.data.choices[0].message.content;
+    console.log("NVIDIA Response received, length:", responseText.length);
+
+    // Find the JSON part in case the model added conversational filler
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error("DEBUG: Model returned text that doesn't contain a JSON object:", responseText);
+      throw new Error("NVIDIA returned invalid format (no JSON object found)");
+    }
+
+    try {
+      const quizData = JSON.parse(jsonMatch[0]);
+      return quizData;
+    } catch (parseError) {
+      // Auto-repair: fix trailing commas, then try to close truncated JSON
+      console.warn("JSON parse failed, attempting auto-repair...");
+      let repaired = jsonMatch[0];
+      repaired = repaired.replace(/,\s*]/g, "]").replace(/,\s*}/g, "}");
+      repaired = repaired.replace(/,,+/g, ",");
+
+      // Count open brackets/braces and close them
+      let openBraces = 0, openBrackets = 0, inStr = false, esc = false;
+      for (const ch of repaired) {
+        if (esc) { esc = false; continue; }
+        if (ch === '\\') { esc = true; continue; }
+        if (ch === '"') { inStr = !inStr; continue; }
+        if (inStr) continue;
+        if (ch === '{') openBraces++;
+        if (ch === '}') openBraces--;
+        if (ch === '[') openBrackets++;
+        if (ch === ']') openBrackets--;
+      }
+      if (inStr) repaired += '"';
+      repaired = repaired.replace(/,\s*$/, '');
+      for (let i = 0; i < openBrackets; i++) repaired += ']';
+      for (let i = 0; i < openBraces; i++) repaired += '}';
+      repaired = repaired.replace(/,\s*]/g, "]").replace(/,\s*}/g, "}");
+
+      try {
+        const quizData = JSON.parse(repaired);
+        // Filter incomplete questions
+        if (quizData.questions) {
+          quizData.questions = quizData.questions.filter(q =>
+            q.question && q.options && q.options.length === 4
+          );
+        }
+        console.log(`✅ Repaired! ${quizData.questions?.length || 0} questions recovered.`);
+        return quizData;
+      } catch (e2) {
+        console.error("Repair also failed:", e2.message);
+        throw new Error("Failed to parse the JSON generated by NVIDIA");
+      }
+    }
+  } catch (error) {
+    if (error.response) {
+      console.error("NVIDIA API Error Detail:", error.response.data);
+      if (error.response.status === 401) {
+        throw new Error("NVIDIA API Key is invalid or expired.");
+      }
+    } else {
+      console.error("Network or Setup Error:", error.message);
+    }
+    throw new Error(`NVIDIA Generation failed: ${error.message}`);
+  }
+};
+
+module.exports = {
+  generateQuestionsWithNvidia,
+};

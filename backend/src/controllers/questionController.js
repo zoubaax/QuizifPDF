@@ -1,5 +1,5 @@
 const { extractTextFromPDF } = require("../services/pdfService");
-const { generateQuestions } = require("../services/geminiService");
+const { generateQuestionsWithNvidia: generateQuestions } = require("../services/nvidiaService");
 
 /**
  * Controller to handle PDF upload and question generation.
